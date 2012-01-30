@@ -68,9 +68,10 @@ namespace SignedDistanceFontGenerator
             progressBar1.Step = 1;
             progressBar1.Value = progressBar1.Minimum;
 
+            ThreadPool.SetMaxThreads(Environment.ProcessorCount, 1);
+
             saveFileDialog1.Filter = "PNG file (*.png)|*.png|All files (*.*)|*.*";
             if (saveFileDialog1.ShowDialog() != DialogResult.OK) return;
-
 
             var fnt =
              (from font in System.Drawing.FontFamily.Families
@@ -195,7 +196,7 @@ namespace SignedDistanceFontGenerator
         }
     }
 
-    class Point
+    struct Point
     {
         public float dx;
         public float dy;
@@ -212,9 +213,9 @@ namespace SignedDistanceFontGenerator
 
     class Grid
     {
-        int Width;
-        int Height;
-        Point[,] grid;
+        readonly int Width;
+        readonly int Height;
+        Point[] grid;
 
         readonly Point Outside = new Point(1e6f, 1e6f);
         readonly Point Inside = new Point(0, 0);
@@ -223,13 +224,13 @@ namespace SignedDistanceFontGenerator
         {
             Width = width;
             Height = height;
-            grid = new Point[width, height];
+            grid = new Point[width * height];
         }
 
         Point Get(int x, int y)
         {
             if (x >= 0 && y >= 0 && x < Width && y < Height)
-                return grid[x, y];
+                return grid[x + y * Width];
             else
                 return Outside;
         }
@@ -237,7 +238,7 @@ namespace SignedDistanceFontGenerator
         void Put(int x, int y, Point p)
         {
             if (x >= 0 && y >= 0 && x < Width && y < Height)
-                grid[x, y] = p;
+                grid[x + y * Width] = p;
         }
 
         Point Compare(Point p, int x, int y, int offsetx, int offsety)
@@ -255,9 +256,12 @@ namespace SignedDistanceFontGenerator
                               ImageLockMode.ReadWrite,
                               PixelFormat.Format32bppArgb);
 
-            for (int y = 0; y < bmp.Height; y++)
+            int width = bmp.Width;
+            int height = bmp.Height;
+
+            for (int y = 0; y < height; y++)
             {
-                for (int x = 0; x < bmp.Width; x++)
+                for (int x = 0; x < width; x++)
                 {
                     int idx = y * data.Stride + x * 4;
                     uint color = (uint)Marshal.ReadInt32(data.Scan0, idx);
@@ -325,7 +329,7 @@ namespace SignedDistanceFontGenerator
             {
                 for (int x = 0; x < g1.Width; x++)
                 {
-                    float d = g1.grid[x, y].Dist() - g2.grid[x, y].Dist();
+                    float d = g1.grid[x + y * g1.Width].Dist() - g2.grid[x + y * g1.Width].Dist();
                     diff.Put(x, y, new Point(d, 0));
                 }
             }
@@ -345,12 +349,15 @@ namespace SignedDistanceFontGenerator
                               ImageLockMode.ReadWrite,
                               PixelFormat.Format32bppRgb);
 
-            for (int y = 0; y < bmp.Height; y++)
+            int width = bmp.Width;
+            int height = bmp.Height;
+
+            for (int y = 0; y < height; y++)
             {
-                for (int x = 0; x < bmp.Width; x++)
+                for (int x = 0; x < width; x++)
                 {
                     int idx = y * data.Stride + x * 4;
-                    float dst = grid[x, y].dx;
+                    float dst = grid[x + y * Width].dx;
                     dst = dst < 0
                         ? -128 * (dst - min) / min
                         : 128 + 128 * dst / max;
