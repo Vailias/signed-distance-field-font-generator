@@ -115,7 +115,7 @@ namespace SignedDistanceFontGenerator
 
             using (Graphics g = Graphics.FromImage(bmp))
             {
-                g.Clear(Color.White);
+                g.Clear(Color.Transparent);
 
                 lock (dict)
                 {
@@ -137,7 +137,7 @@ namespace SignedDistanceFontGenerator
 
             pictureBox1.Invoke((MethodInvoker)delegate
             {
-                pictureBox1.Image = new Bitmap(bmp);
+                pictureBox1.Image = bmp.Clone(new Rectangle(0, 0, bmp.Width, bmp.Height), PixelFormat.Format24bppRgb);
             });
 
             statusStrip1.Invoke((MethodInvoker)delegate
@@ -177,32 +177,39 @@ namespace SignedDistanceFontGenerator
 
         private Bitmap RenderDistanceFieldForChar(char c, Font f, InterpolationMode interpolation)
         {
-            uint[] buffer = new uint[256 * 256];
+            int width = 256;
+            int height = 256;
+
+            uint[] buffer = new uint[width * height];
             GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
             IntPtr pointer = Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0);
-            Bitmap bmp = new Bitmap(256, 256, 256 * 4, PixelFormat.Format32bppArgb, pointer);
+            Bitmap bmp = new Bitmap(width, height, width * 4, PixelFormat.Format32bppArgb, pointer);
 
             using (Graphics g = Graphics.FromImage(bmp))
             {
-
                 g.Clear(Color.White);
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+                g.SmoothingMode = SmoothingMode.HighQuality;
                 g.DrawString(c.ToString(), f, Brushes.Black, new PointF(0, 0));
             }
 
             Grid g1, g2;
-            Grid.FromBitmap(out g1, out g2, bmp, buffer);
+            Grid.FromBitmap(out g1, out g2, width, height, buffer);
 
             g1.Generate();
             g2.Generate();
 
-            Grid diff = Grid.FromDifference(g1, g2);
-            return diff.ToBitmap(interpolation);
+            return Grid.ToBitmap(g1, g2, interpolation);
         }
     }
 
+    [StructLayout(LayoutKind.Explicit, Size=8)]
     struct Point
     {
+        [FieldOffset(0)]
         public float dx;
+
+        [FieldOffset(4)]
         public float dy;
 
         public Point(float dx_, float dy_)
@@ -212,7 +219,7 @@ namespace SignedDistanceFontGenerator
         }
 
         public float DistSqr() { return (dx * dx) + (dy * dy); }
-        public float Dist() { return (float)Math.Sqrt((dx * dx) + (dy * dy)); }
+        public float Dist() { return (float)Math.Sqrt(DistSqr()); }
     }
 
     class Grid
@@ -221,8 +228,8 @@ namespace SignedDistanceFontGenerator
         readonly int Height;
         Point[] grid;
 
-        readonly Point Outside = new Point(1e6f, 1e6f);
-        readonly Point Inside = new Point(0, 0);
+        static Point Outside = new Point(1e6f, 1e6f);
+        static Point Inside = new Point(0, 0);
 
         private Grid(int width, int height)
         {
@@ -241,8 +248,7 @@ namespace SignedDistanceFontGenerator
 
         void Put(int x, int y, Point p)
         {
-            if (x >= 0 && y >= 0 && x < Width && y < Height)
-                grid[x + y * Width] = p;
+            grid[x + y * Width] = p;
         }
 
         Point Compare(Point p, int x, int y, int offsetx, int offsety)
@@ -252,16 +258,13 @@ namespace SignedDistanceFontGenerator
             return other.DistSqr() < p.DistSqr() ? other : p;
         }
 
-        public static void FromBitmap(out Grid g1, out Grid g2, Bitmap bmp, uint[] buffer)
+        public static void FromBitmap(out Grid g1, out Grid g2, int width, int height, uint[] buffer)
         {
-            int width = bmp.Width;
-            int height = bmp.Height;
-
             g1 = new Grid(width, height);
             g2 = new Grid(width, height);
             
-            Point inside = g1.Inside;
-            Point outside = g1.Outside;
+            Point inside = Inside;
+            Point outside = Outside;
 
             int idx = 0;
 
@@ -331,33 +334,14 @@ namespace SignedDistanceFontGenerator
             }
         }
 
-        public static Grid FromDifference(Grid g1, Grid g2)
+        public static Bitmap ToBitmap(Grid g1, Grid g2, InterpolationMode interpolation)
         {
-            Debug.Assert(g1.Width == g2.Width);
-            Debug.Assert(g1.Height == g2.Height);
-
-            Grid diff = new Grid(g1.Height, g1.Width);
-
-            for (int y = 0; y < g1.Height; y++)
-            {
-                for (int x = 0; x < g1.Width; x++)
-                {
-                    float d = g1.grid[x + y * g1.Width].Dist() - g2.grid[x + y * g1.Width].Dist();
-                    diff.Put(x, y, new Point(d, 0));
-                }
-            }
-
-            return diff;
-        }
-
-        public Bitmap ToBitmap(InterpolationMode interpolation)
-        {
-            uint[] buffer = new uint[Width * Height];
+            uint[] buffer = new uint[g1.Width * g1.Height];
             GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
             IntPtr pointer = Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0);
-            Bitmap bmp = new Bitmap(Width, Height, Width * 4, PixelFormat.Format32bppArgb, pointer);
+            Bitmap bmp = new Bitmap(g1.Width, g1.Height, g1.Width * 4, PixelFormat.Format32bppArgb, pointer);
 
-            float spread = Math.Min(Width, Height) / 8;
+            float spread = Math.Min(g1.Width, g1.Height) / 8;
 
             float min = -spread;
             float max =  spread;
@@ -371,33 +355,35 @@ namespace SignedDistanceFontGenerator
             {
                 for (int x = 0; x < width; x++)
                 {
-                    float dst = grid[x + y * Width].dx;
+                    float dst = g1.grid[idx].Dist() - g2.grid[idx].Dist();
+
                     dst = dst < 0
                         ? -128 * (dst - min) / min
                         : 128 + 128 * dst / max;
+
                     uint channel = (uint)Math.Max(0, Math.Min(255, dst));
-                    uint val = (0xffu << 24) | (channel << 16) | (channel << 8) | channel;
+                    uint val = (channel << 24) | (channel << 16) | (channel << 8) | channel;
+
                     buffer[idx] = val;
                     idx++;
                 }
             }
 
-            bmp = ResizeBitmap(bmp, Width >> 3, Height >> 3, interpolation);
+            bmp = ResizeBitmap(bmp, g1.Width >> 3, g1.Height >> 3, interpolation);
 
             return bmp;
         }
 
-        private Bitmap ResizeBitmap(Bitmap bmp, int w, int h, InterpolationMode interpolation)
+        private static Bitmap ResizeBitmap(Bitmap bmp, int w, int h, InterpolationMode interpolation)
         {
             Bitmap result = new Bitmap(w, h, PixelFormat.Format32bppArgb);
 
             using (Graphics g = Graphics.FromImage(result))
             {
-                g.InterpolationMode     = interpolation;
-                g.SmoothingMode         = SmoothingMode.HighQuality;
-                g.PixelOffsetMode       = PixelOffsetMode.HighQuality;
-                g.CompositingQuality    = CompositingQuality.HighQuality;
-
+                g.InterpolationMode = interpolation;
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.CompositingQuality = CompositingQuality.HighQuality;
                 g.DrawImage(bmp, 0, 0, w, h);
             }
 
