@@ -133,17 +133,17 @@ namespace SignedDistanceFontGenerator
             FontState state = (FontState)obj;
             state.s.Stop();
 
+            bmp.Save(state.filename, ImageFormat.Png);
+
             pictureBox1.Invoke((MethodInvoker)delegate
             {
-                pictureBox1.Image = bmp;
+                pictureBox1.Image = new Bitmap(bmp);
             });
 
             statusStrip1.Invoke((MethodInvoker)delegate
             {
                 toolStripStatusLabel1.Text = string.Format("Ran for {0} seconds", state.s.ElapsedMilliseconds / 1000.0);
             });
-
-            bmp.Save(state.filename, ImageFormat.Png);
         }
 
         private void RenderDistanceFieldForAsciiChar(object obj)
@@ -177,7 +177,11 @@ namespace SignedDistanceFontGenerator
 
         private Bitmap RenderDistanceFieldForChar(char c, Font f, InterpolationMode interpolation)
         {
-            Bitmap bmp = new Bitmap(256, 256, PixelFormat.Format32bppArgb);
+            uint[] buffer = new uint[256 * 256];
+            GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+            IntPtr pointer = Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0);
+            Bitmap bmp = new Bitmap(256, 256, 256 * 4, PixelFormat.Format32bppArgb, pointer);
+
             using (Graphics g = Graphics.FromImage(bmp))
             {
 
@@ -185,8 +189,8 @@ namespace SignedDistanceFontGenerator
                 g.DrawString(c.ToString(), f, Brushes.Black, new PointF(0, 0));
             }
 
-            Grid g1 = Grid.FromBitmap(bmp, true);
-            Grid g2 = Grid.FromBitmap(bmp, false);
+            Grid g1, g2;
+            Grid.FromBitmap(out g1, out g2, bmp, buffer);
 
             g1.Generate();
             g2.Generate();
@@ -248,31 +252,40 @@ namespace SignedDistanceFontGenerator
             return other.DistSqr() < p.DistSqr() ? other : p;
         }
 
-        public static Grid FromBitmap(Bitmap bmp, bool neg)
+        public static void FromBitmap(out Grid g1, out Grid g2, Bitmap bmp, uint[] buffer)
         {
-            Grid g = new Grid(bmp.Width, bmp.Height);
-
-            BitmapData data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
-                              ImageLockMode.ReadWrite,
-                              PixelFormat.Format32bppArgb);
-
             int width = bmp.Width;
             int height = bmp.Height;
+
+            g1 = new Grid(width, height);
+            g2 = new Grid(width, height);
+            
+            Point inside = g1.Inside;
+            Point outside = g1.Outside;
+
+            int idx = 0;
 
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
-                    int idx = y * data.Stride + x * 4;
-                    uint color = (uint)Marshal.ReadInt32(data.Scan0, idx);
+                    uint color = buffer[idx];
                     bool set = (color & 0xff) > 0x7f;
-                    g.Put(x, y, set ^ neg ? g.Inside : g.Outside);
+
+                    if (set)
+                    {
+                        g2.Put(x, y, inside);
+                        g1.Put(x, y, outside);
+                    }
+                    else
+                    {
+                        g1.Put(x, y, inside);
+                        g2.Put(x, y, outside);
+                    }
+
+                    idx++;
                 }
             }
-
-            bmp.UnlockBits(data);
-
-            return g;
         }
 
         public void Generate()
@@ -339,35 +352,35 @@ namespace SignedDistanceFontGenerator
 
         public Bitmap ToBitmap(InterpolationMode interpolation)
         {
-            Bitmap bmp = new Bitmap(Width, Height, PixelFormat.Format32bppRgb);
+            uint[] buffer = new uint[Width * Height];
+            GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+            IntPtr pointer = Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0);
+            Bitmap bmp = new Bitmap(Width, Height, Width * 4, PixelFormat.Format32bppArgb, pointer);
+
             float spread = Math.Min(Width, Height) / 8;
 
             float min = -spread;
             float max =  spread;
 
-            BitmapData data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
-                              ImageLockMode.ReadWrite,
-                              PixelFormat.Format32bppRgb);
-
             int width = bmp.Width;
             int height = bmp.Height;
+
+            int idx = 0;
 
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
-                    int idx = y * data.Stride + x * 4;
                     float dst = grid[x + y * Width].dx;
                     dst = dst < 0
                         ? -128 * (dst - min) / min
                         : 128 + 128 * dst / max;
                     uint channel = (uint)Math.Max(0, Math.Min(255, dst));
-                    uint val = (channel << 24) | (channel << 16) | (channel << 8) | channel;
-                    Marshal.WriteInt32(data.Scan0, idx, (int)val);
+                    uint val = (0xffu << 24) | (channel << 16) | (channel << 8) | channel;
+                    buffer[idx] = val;
+                    idx++;
                 }
             }
-
-            bmp.UnlockBits(data);
 
             bmp = ResizeBitmap(bmp, Width >> 3, Height >> 3, interpolation);
 
