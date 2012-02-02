@@ -11,6 +11,13 @@ using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.Threading;
 using System.Drawing.Drawing2D;
+using Svg;
+
+/// TODO:
+///  - Output .font file (JSON format) with:
+///     - UVs for rendering
+///     - Kerning and other relevant glyph information
+///  - Adjust fitting algorithm using GetTextMetrics?
 
 namespace SignedDistanceFontGenerator
 {
@@ -24,16 +31,73 @@ namespace SignedDistanceFontGenerator
             InitializeComponent();
         }
 
+        Bitmap RenderSvgToDistanceField(string filename)
+        {
+            uint[] buffer;
+            int width = 4096;
+            int height = 4096;
+            SvgDocument d = SvgDocument.Open(@"c:\emoticons.svg");
+            float aspect = d.Width.Value / d.Height.Value;
+            d.Width = new SvgUnit(SvgUnitType.Pixel, 4096.0f * aspect);
+            d.Height = new SvgUnit(SvgUnitType.Pixel, 4096.0f);
+            Bitmap svg = d.Draw();
+            Bitmap bmp = BitmapHelper.CreateNewManagedBitmap(width, height, out buffer);
+
+            using (Graphics g = Graphics.FromImage(bmp))
+            {
+                g.DrawImage(svg, 0, 0);
+            }
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int idx = x + y * width;
+
+                    uint r = buffer[idx] & 0xff;
+                    uint g = (buffer[idx] & 0xff00) >> 8;
+                    uint b = (buffer[idx] & 0xff0000) >> 16;
+                    uint a = (buffer[idx] & 0xff000000) >> 24;
+
+                    uint gray = (r + g + b) / 3;
+
+                    if (a == 0) // assume background
+                    {
+                        buffer[idx] = 0xffffffff;
+                    }
+                    else if (gray < 127)
+                    {
+                        buffer[idx] = 0xff000000;
+                    }
+                    else
+                    {
+                        buffer[idx] = 0xffffffff;
+                    }
+                }
+            }
+
+            return CreateDistanceField(InterpolationMode.HighQualityBicubic, width, height, 5, buffer);
+        }
+
+        Win32.TEXTMETRIC GetTextMetrics(Font f)
+        {
+            Win32.TEXTMETRIC t;
+            IntPtr hdc = Win32.GetDC(Handle);
+            Win32.SelectObject(hdc, f.ToHfont());
+            Win32.GetTextMetrics(hdc, out t);
+            return t;
+        }
+
         private void Form1_Load(object sender, EventArgs e)
         {
-            comboBox2.SelectedIndex = comboBox2.Items.Count - 1;
+            fontFilterMethod.SelectedIndex = fontFilterMethod.Items.Count - 1;
 
             foreach (FontFamily font in System.Drawing.FontFamily.Families)
             {
-                comboBox1.Items.Add(font.Name);
+                fontList.Items.Add(font.Name);
             }
 
-            comboBox1.SelectedIndex = 0;
+            fontList.SelectedIndex = 0;
         }
 
         class FontState
@@ -70,12 +134,12 @@ namespace SignedDistanceFontGenerator
 
             ThreadPool.SetMaxThreads(Environment.ProcessorCount, 1);
 
-            saveFileDialog1.Filter = "PNG file (*.png)|*.png|All files (*.*)|*.*";
-            if (saveFileDialog1.ShowDialog() != DialogResult.OK) return;
+            fontSaveFile.Filter = "PNG file (*.png)|*.png|All files (*.*)|*.*";
+            if (fontSaveFile.ShowDialog() != DialogResult.OK) return;
 
             var fnt =
              (from font in System.Drawing.FontFamily.Families
-              where font.Name == comboBox1.SelectedItem.ToString()
+              where font.Name == fontList.SelectedItem.ToString()
               select font).First();
 
             // find a font-height that won't leak outside the image
@@ -92,16 +156,16 @@ namespace SignedDistanceFontGenerator
             {
                 ThreadPool.QueueUserWorkItem(
                     new WaitCallback(RenderDistanceFieldForAsciiChar),
-                    new FontState(f, i, GetInterpolationMode(), range, saveFileDialog1.FileName)
+                    new FontState(f, i, GetInterpolationMode(), range, fontSaveFile.FileName)
                 );
             }
         }
 
         private InterpolationMode GetInterpolationMode()
         {
-            if (comboBox2.SelectedIndex == 0) return InterpolationMode.NearestNeighbor;
-            if (comboBox2.SelectedIndex == 1) return InterpolationMode.HighQualityBilinear;
-            if (comboBox2.SelectedIndex == 2) return InterpolationMode.HighQualityBicubic;
+            if (fontFilterMethod.SelectedIndex == 0) return InterpolationMode.NearestNeighbor;
+            if (fontFilterMethod.SelectedIndex == 1) return InterpolationMode.HighQualityBilinear;
+            if (fontFilterMethod.SelectedIndex == 2) return InterpolationMode.HighQualityBicubic;
 
             return InterpolationMode.HighQualityBilinear;
         }
@@ -135,9 +199,9 @@ namespace SignedDistanceFontGenerator
 
             bmp.Save(state.filename, ImageFormat.Png);
 
-            pictureBox1.Invoke((MethodInvoker)delegate
+            fontPreview.Invoke((MethodInvoker)delegate
             {
-                pictureBox1.Image = bmp.Clone(new Rectangle(0, 0, bmp.Width, bmp.Height), PixelFormat.Format24bppRgb);
+                fontPreview.Image = new Bitmap(bmp);
             });
 
             statusStrip1.Invoke((MethodInvoker)delegate
@@ -179,11 +243,9 @@ namespace SignedDistanceFontGenerator
         {
             int width = 256;
             int height = 256;
+            uint[] buffer;
 
-            uint[] buffer = new uint[width * height];
-            GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-            IntPtr pointer = Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0);
-            Bitmap bmp = new Bitmap(width, height, width * 4, PixelFormat.Format32bppArgb, pointer);
+            Bitmap bmp = BitmapHelper.CreateNewManagedBitmap(width, height, out buffer);
 
             using (Graphics g = Graphics.FromImage(bmp))
             {
@@ -193,13 +255,57 @@ namespace SignedDistanceFontGenerator
                 g.DrawString(c.ToString(), f, Brushes.Black, new PointF(0, 0));
             }
 
+            return CreateDistanceField(interpolation, width, height, 3, buffer);
+        }
+
+        private static Bitmap CreateDistanceField(InterpolationMode interpolation, int width, int height, int scale, uint[] buffer)
+        {
             Grid g1, g2;
             Grid.FromBitmap(out g1, out g2, width, height, buffer);
 
             g1.Generate();
             g2.Generate();
 
-            return Grid.ToBitmap(g1, g2, interpolation);
+            return Grid.ToBitmap(g1, g2, scale, interpolation);
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            svgOpenFile.Filter = "SVG Files (*.svg)|*.svg|All files (*.*)|*.*";
+            if (svgOpenFile.ShowDialog() != DialogResult.OK) return;
+
+            lastSvgFilename = svgOpenFile.FileName;
+
+            SvgDocument svg = SvgDocument.Open(svgOpenFile.FileName);
+            float aspect = svg.Width.Value / svg.Height.Value;
+            svg.Width = new SvgUnit(SvgUnitType.Pixel, decalPreview.Width * aspect);
+            svg.Height = new SvgUnit(SvgUnitType.Pixel, decalPreview.Height);
+            Bitmap bmp = svg.Draw();
+            decalPreview.Image = bmp;
+        }
+
+        private string lastSvgFilename = "";
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(lastSvgFilename))
+            {
+                svgSaveFile.Filter = "PNG Files (*.png)|*.png|All files (*.*)|*.*";
+                if (svgSaveFile.ShowDialog() != DialogResult.OK) return;
+                RenderSvgToDistanceField(lastSvgFilename).Save(svgSaveFile.FileName);
+            }
+        }
+    }
+
+    class BitmapHelper
+    {
+        public static Bitmap CreateNewManagedBitmap(int width, int height, out uint[] buffer)
+        {
+            buffer = new uint[width * height];
+            GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+            IntPtr pointer = Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0);
+            Bitmap bmp = new Bitmap(width, height, width * 4, PixelFormat.Format32bppArgb, pointer);
+            return bmp;
         }
     }
 
@@ -334,14 +440,11 @@ namespace SignedDistanceFontGenerator
             }
         }
 
-        public static Bitmap ToBitmap(Grid g1, Grid g2, InterpolationMode interpolation)
+        public static Bitmap ToBitmap(Grid g1, Grid g2, int scalefactor, InterpolationMode interpolation)
         {
-            uint[] buffer = new uint[g1.Width * g1.Height];
-            GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-            IntPtr pointer = Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0);
-            Bitmap bmp = new Bitmap(g1.Width, g1.Height, g1.Width * 4, PixelFormat.Format32bppArgb, pointer);
-
-            float spread = Math.Min(g1.Width, g1.Height) / 8;
+            uint[] buffer;
+            Bitmap bmp = BitmapHelper.CreateNewManagedBitmap(g1.Width, g1.Height, out buffer);
+            float spread = Math.Min(g1.Width, g1.Height) / (1 << scalefactor);
 
             float min = -spread;
             float max =  spread;
@@ -369,7 +472,7 @@ namespace SignedDistanceFontGenerator
                 }
             }
 
-            bmp = ResizeBitmap(bmp, g1.Width >> 3, g1.Height >> 3, interpolation);
+            bmp = ResizeBitmap(bmp, g1.Width >> scalefactor, g1.Height >> scalefactor, interpolation);
 
             return bmp;
         }
@@ -389,6 +492,102 @@ namespace SignedDistanceFontGenerator
 
             return result; ;
         }
+    }
+
+    class Win32
+    {
+        [Serializable, StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public struct TEXTMETRIC
+        {
+            public int tmHeight;
+            public int tmAscent;
+            public int tmDescent;
+            public int tmInternalLeading;
+            public int tmExternalLeading;
+            public int tmAveCharWidth;
+            public int tmMaxCharWidth;
+            public int tmWeight;
+            public int tmOverhang;
+            public int tmDigitizedAspectX;
+            public int tmDigitizedAspectY;
+            public char tmFirstChar;
+            public char tmLastChar;
+            public char tmDefaultChar;
+            public char tmBreakChar;
+            public byte tmItalic;
+            public byte tmUnderlined;
+            public byte tmStruckOut;
+            public byte tmPitchAndFamily;
+            public byte tmCharSet;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT
+        {
+            public int X;
+            public int Y;
+
+            public POINT(int x, int y)
+            {
+                this.X = x;
+                this.Y = y;
+            }
+
+            public static implicit operator System.Drawing.Point(POINT p)
+            {
+                return new System.Drawing.Point(p.X, p.Y);
+            }
+
+            public static implicit operator POINT(System.Drawing.Point p)
+            {
+                return new POINT(p.X, p.Y);
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct GLYPHMETRICS
+        {
+            public int gmBlackBoxX;
+            public int gmBlackBoxY;
+            [MarshalAs(UnmanagedType.Struct)]
+            public POINT gmptGlyphOrigin;
+            public short gmCellIncX;
+            public short gmCellIncY;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct FIXED
+        {
+
+            public short fract;
+            public short value;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MAT2
+        {
+            [MarshalAs(UnmanagedType.Struct)]
+            public FIXED eM11;
+            [MarshalAs(UnmanagedType.Struct)]
+            public FIXED eM12;
+            [MarshalAs(UnmanagedType.Struct)]
+            public FIXED eM21;
+            [MarshalAs(UnmanagedType.Struct)]
+            public FIXED eM22;
+        }
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetDC(IntPtr hWnd);
+
+        [DllImport("gdi32.dll", ExactSpelling = true, PreserveSig = true, SetLastError = true)]
+        public static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj);
+
+        [DllImport("gdi32.dll", CharSet = CharSet.Auto)]
+        public static extern bool GetTextMetrics(IntPtr hdc, out TEXTMETRIC lptm);
+
+        [DllImport("gdi32.dll")]
+        static extern uint GetGlyphOutline(IntPtr hdc, uint uChar, uint uFormat,
+           out GLYPHMETRICS lpgm, uint cbBuffer, IntPtr lpvBuffer, ref MAT2 lpmat2);
     }
 
 }
