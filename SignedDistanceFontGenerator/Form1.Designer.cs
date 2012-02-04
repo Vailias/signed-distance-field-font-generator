@@ -190,7 +190,7 @@
             this.MaximizeBox = false;
             this.Name = "Form1";
             this.SizeGripStyle = System.Windows.Forms.SizeGripStyle.Hide;
-            this.Text = "Signed distance field font generator tool";
+            this.Text = "Signed distance field generator tool";
             this.Load += new System.EventHandler(this.Form1_Load);
             ((System.ComponentModel.ISupportInitialize)(this.fontPreview)).EndInit();
             this.statusStrip1.ResumeLayout(false);
