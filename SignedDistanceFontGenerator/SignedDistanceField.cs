@@ -167,25 +167,7 @@ namespace SignedDistanceFontGenerator
                 }
             }
 
-            bmp = ResizeBitmap(bmp, g1.Width >> scalefactor, g1.Height >> scalefactor, interpolation);
-
-            return bmp;
-        }
-
-        private static Bitmap ResizeBitmap(Bitmap bmp, int w, int h, InterpolationMode interpolation)
-        {
-            Bitmap result = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-
-            using (Graphics g = Graphics.FromImage(result))
-            {
-                g.InterpolationMode = interpolation;
-                g.SmoothingMode = SmoothingMode.HighQuality;
-                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                g.CompositingQuality = CompositingQuality.HighQuality;
-                g.DrawImage(bmp, 0, 0, w, h);
-            }
-
-            return result; ;
+            return BitmapHelper.ResizeBitmap(bmp, g1.Width >> scalefactor, g1.Height >> scalefactor, interpolation);
         }
     }
 }

@@ -80,7 +80,7 @@ namespace SignedDistanceFontGenerator
             byte end = 0x7e;
             int range = end - start;
 
-            progressBar1.Maximum = end - start;
+            progressBar1.Maximum = range;
             progressBar1.Step = 1;
             progressBar1.Value = progressBar1.Minimum;
 
@@ -92,15 +92,7 @@ namespace SignedDistanceFontGenerator
               where font.Name == fontList.SelectedItem.ToString()
               select font).First();
 
-            // find a font-height that won't leak outside the image
-            Font f;
-            float emSize = 256; // M-width
-            while (true)
-            {
-                f = new Font(fnt, emSize, GraphicsUnit.Pixel);
-                if (f.Height < 256 - 32) break;
-                emSize--;
-            }
+            Font f = FindFontWithDimensions(fnt, 256, 256, 16);
 
             for (byte i = start; i <= end; i++)
             {
@@ -111,6 +103,21 @@ namespace SignedDistanceFontGenerator
                     new FontState(f, c, GetInterpolationMode(), range, fontSaveFile.FileName)
                 );
             }
+        }
+
+        private static Font FindFontWithDimensions(FontFamily fnt, int width, int height, int border)
+        {
+            Font f;
+
+            float emSize = width; // M-width
+            while (true)
+            {
+                f = new Font(fnt, emSize, GraphicsUnit.Pixel);
+                if (f.Height < height - 32) break;
+                emSize--;
+            }
+
+            return f;
         }
 
         private InterpolationMode GetInterpolationMode()
@@ -154,7 +161,7 @@ namespace SignedDistanceFontGenerator
             FontState state = (FontState)obj;
 
             Bitmap bmp = SignedDistanceFieldRenderer.RenderDistanceFieldForChar(
-                state.glyph, state.font, state.interpolation);
+                state.glyph, state.font, 256, 256, state.interpolation);
 
             lock (dict)
             {

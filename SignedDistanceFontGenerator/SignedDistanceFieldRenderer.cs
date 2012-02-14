@@ -1,11 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Text;
 using System.Threading;
 using Svg;
 
@@ -19,7 +17,7 @@ namespace SignedDistanceFontGenerator
 
             using (Graphics g = Graphics.FromImage(bmp))
             {
-                g.Clear(Color.Transparent);
+                g.Clear(Color.FromArgb(0xff, 0xff, 0xff, 0xff));
 
                 foreach (KeyValuePair<char, Bitmap> k in dict)
                 {
@@ -27,7 +25,12 @@ namespace SignedDistanceFontGenerator
                     int x = idx % (width / k.Value.Width);
                     int y = idx / (width / k.Value.Width);
 
-                    g.DrawImage(k.Value, x * k.Value.Width, y * k.Value.Height, k.Value.Width, k.Value.Height);
+                    g.CompositingMode = CompositingMode.SourceCopy;
+
+                    g.DrawImage(
+                        k.Value, 
+                        x * k.Value.Width, 
+                        y * k.Value.Height);
                 }
             }
 
@@ -45,10 +48,8 @@ namespace SignedDistanceFontGenerator
             return chars[0];
         }
 
-        public static Bitmap RenderDistanceFieldForChar(char c, Font f, InterpolationMode interpolation)
+        public static Bitmap RenderDistanceFieldForChar(char c, Font f, int width, int height, InterpolationMode interpolation)
         {
-            int width = 256;
-            int height = 256;
             uint[] buffer;
 
             Bitmap bmp = BitmapHelper.CreateNewManagedBitmap(width, height, out buffer);
