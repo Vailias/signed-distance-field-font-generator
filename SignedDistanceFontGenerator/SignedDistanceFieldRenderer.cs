@@ -86,8 +86,7 @@ namespace SignedDistanceFontGenerator
         /// <param name="scale"></param>
         /// <param name="filename"></param>
         /// <param name="buffer"></param>
-        public static void CreateAndStoreBigDistanceField(InterpolationMode interpolationMode, int width, int height, int scale, string filename, uint[] buffer)
-        {
+        public static void CreateAndStoreBigDistanceField(InterpolationMode interpolationMode, int width, int height, int scale, string filename, uint[] buffer, int spreadFactor = -1)        {
             ThreadPool.QueueUserWorkItem(new WaitCallback((object o) =>
             {
                 Grid g1, g2;
@@ -99,7 +98,7 @@ namespace SignedDistanceFontGenerator
                     g1.Generate();
                     if (Interlocked.Add(ref completionCounter, 1) == 2)
                     {
-                        Grid.ToBitmap(g1, g2, scale, interpolationMode).Save(filename);
+                        Grid.ToBitmap(g1, g2, scale, interpolationMode, spreadFactor).Save(filename);
                     }
                 }));
 
@@ -108,15 +107,16 @@ namespace SignedDistanceFontGenerator
                     g2.Generate();
                     if (Interlocked.Add(ref completionCounter, 1) == 2)
                     {
-                        Grid.ToBitmap(g1, g2, scale, interpolationMode).Save(filename);
+                        Grid.ToBitmap(g1, g2, scale, interpolationMode, spreadFactor).Save(filename);
                     }
                 }));
             }));
         }
 
-        public static void RenderSvgToDistanceFieldToFile(string input, string output)
+        public static void RenderSvgToDistanceFieldToFile(string input, string output, int scaleFactor = 5, int spreadfactor = -1)
         {
             uint[] buffer;
+            //TODO: make these a config setting
             int width = 4096;
             int height = 4096;
 
@@ -129,7 +129,7 @@ namespace SignedDistanceFontGenerator
             }
 
             ConvertToMonochrome(buffer, width, height);
-            CreateAndStoreBigDistanceField(InterpolationMode.HighQualityBicubic, width, height, 5, output, buffer);
+            CreateAndStoreBigDistanceField(InterpolationMode.HighQualityBicubic, width, height, scaleFactor, output, buffer, spreadfactor);
         }
 
         public static void ConvertToMonochrome(uint[] buffer, int width, int height)
@@ -163,13 +163,19 @@ namespace SignedDistanceFontGenerator
             }
         }
 
+        /// <summary>
+        /// Renders SVG to a bitmap at specified size. 
+        /// Feed desired aspect ratio corrected values to this method.
+        /// </summary>
+        /// <param name="input">File name of SVG file to render. </param>
+        /// <param name="width">Width to render bitmap.</param>
+        /// <param name="height">Height to render bitmap.</param>
+        /// <returns></returns>
         public static Bitmap RenderSvgToBitmapWithMaximumSize(string input, int width, int height)
         {
-            // TODO: Make the aspect funtion actually work nice
+            
             SvgDocument d = SvgDocument.Open(input);
-
-            float aspect = d.Width.Value / d.Height.Value;
-            d.Width = new SvgUnit(SvgUnitType.Pixel, width * aspect);
+            d.Width = new SvgUnit(SvgUnitType.Pixel, width);
             d.Height = new SvgUnit(SvgUnitType.Pixel, height);
 
             return d.Draw();

@@ -135,11 +135,15 @@ namespace SignedDistanceFontGenerator
             }
         }
 
-        public static Bitmap ToBitmap(Grid g1, Grid g2, int scalefactor, InterpolationMode interpolation)
+        public static Bitmap ToBitmap(Grid g1, Grid g2, int scalefactor, InterpolationMode interpolation, int spreadfactor = -1)
         {
             uint[] buffer;
+            if (spreadfactor == -1)
+            {
+                spreadfactor = scalefactor;
+            }
             Bitmap bmp = BitmapHelper.CreateNewManagedBitmap(g1.Width, g1.Height, out buffer);
-            float spread = Math.Min(g1.Width, g1.Height) / (1 << scalefactor);
+            float spread = Math.Min(g1.Width, g1.Height) / (1 << spreadfactor);
 
             float min = -spread;
             float max = spread;

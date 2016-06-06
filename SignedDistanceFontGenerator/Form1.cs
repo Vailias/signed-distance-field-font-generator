@@ -24,11 +24,13 @@ namespace SignedDistanceFontGenerator
     {
         Dictionary<char, Bitmap> dict = new Dictionary<char, Bitmap>();
         int counter = 0;
+      
 
         public Form1()
         {
             InitializeComponent();
             ThreadPool.SetMaxThreads(Environment.ProcessorCount, 1);
+            this.SizeSelectBox_X.SelectedIndex = 5;
         }
 
         Win32.TEXTMETRIC GetTextMetrics(Font f)
@@ -39,7 +41,7 @@ namespace SignedDistanceFontGenerator
             Win32.GetTextMetrics(hdc, out t);
             return t;
         }
-
+        #region FontForm
         private void Form1_Load(object sender, EventArgs e)
         {
             fontFilterMethod.SelectedIndex = fontFilterMethod.Items.Count - 1;
@@ -131,6 +133,7 @@ namespace SignedDistanceFontGenerator
 
         private void DrawDistanceResults(object obj)
         {
+            //Todo: Revise this to be more freeform
             int w = 512;
             int h = 256;
 
@@ -178,26 +181,86 @@ namespace SignedDistanceFontGenerator
                 ThreadPool.QueueUserWorkItem(new WaitCallback(DrawDistanceResults), obj);
             }
         }
+        #endregion
+        #region Decal Functions
 
-        private void button3_Click(object sender, EventArgs e)
+        private string lastSvgFilename = "";
+        bool DecalLoaded = false;
+        Tuple<float, float> lastWidthHeight = new Tuple<float, float>(0, 0);
+        private void button3_Click(object sender, EventArgs e)//load button
         {
+            //Todo: Add ability to load image file formats also
             svgOpenFile.Filter = "SVG Files (*.svg)|*.svg|All files (*.*)|*.*";
             if (svgOpenFile.ShowDialog() != DialogResult.OK) return;
 
             lastSvgFilename = svgOpenFile.FileName;
-            decalPreview.Image = SignedDistanceFieldRenderer.RenderSvgToBitmapWithMaximumSize(
-                svgOpenFile.FileName, decalPreview.Width, decalPreview.Height);
+            //to minimize disk IO this is only opened once here and when it needs to be rerendered. 
+            SvgDocument d = SvgDocument.Open(svgOpenFile.FileName);
+            lastWidthHeight = new Tuple<float, float>(d.Width.Value, d.Height.Value);
+            DecalLoaded = true;
+
+            decalPreview.Image = RenderSVGToFit(svgOpenFile.FileName, decalPreview.Width, decalPreview.Height);
+           
         }
 
-        private string lastSvgFilename = "";
+        private Bitmap RenderSVGToFit(string FileName, int width, int height) 
+        {
+            
+            float documentAspect = lastWidthHeight.Item1 / lastWidthHeight.Item2;
+            int renderheight, renderwidth;
+                if ((documentAspect <= 1.0f)) 
+                {
+                    renderheight = height;
+                    renderwidth = (int)(height * documentAspect);
 
-        private void button2_Click(object sender, EventArgs e)
+                }
+                else {
+                    renderheight = (int)(width * (1.0f/ documentAspect));
+                    renderwidth = width;
+                }
+
+            return SignedDistanceFieldRenderer.RenderSvgToBitmapWithMaximumSize(FileName, renderwidth, renderheight);
+         }
+
+        private Tuple<int,int> GetRenderToFitSizes(int width, int height)
+        {
+            //there's probably a more elegant way to do this, but it works.
+            int renderheight, renderwidth;
+            float displayAspect = width / height;
+            if (displayAspect > 1) //width greater than height
+            {
+                renderheight = height;
+                renderwidth = (int)(width * (1.0f / displayAspect));
+
+            }
+            else {
+                renderheight = (int)(height * displayAspect);
+                renderwidth = width;
+            }
+            return new Tuple<int, int>(renderwidth, renderheight);
+        }
+
+        private void button2_Click(object sender, EventArgs e)//generate button
         {
             if (!string.IsNullOrEmpty(lastSvgFilename))
             {
                 svgSaveFile.Filter = "PNG Files (*.png)|*.png|All files (*.*)|*.*";
                 if (svgSaveFile.ShowDialog() != DialogResult.OK) return;
-                SignedDistanceFieldRenderer.RenderSvgToDistanceFieldToFile(lastSvgFilename, svgSaveFile.FileName);
+                int scalefactor = this.SizeSelectBox_X.SelectedIndex;
+                int spreadFactor = (int)this.SpreadSelector.Value;
+                SignedDistanceFieldRenderer.RenderSvgToDistanceFieldToFile(lastSvgFilename, svgSaveFile.FileName, scalefactor, spreadFactor);
+                
+            }
+        }
+
+
+        #endregion
+
+        private void Form1_ResizeEnd(object sender, EventArgs e)
+        {
+            if (DecalLoaded)
+            {
+                decalPreview.Image = RenderSVGToFit(lastSvgFilename, decalPreview.Width, decalPreview.Height);
             }
         }
     }

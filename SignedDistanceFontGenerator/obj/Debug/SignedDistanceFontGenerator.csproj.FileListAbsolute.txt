@@ -1,0 +1,10 @@
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\bin\Debug\SignedDistanceFontGenerator.exe
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\bin\Debug\SignedDistanceFontGenerator.pdb
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\bin\Debug\Svg.dll
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Debug\SignedDistanceFontGenerator.csprojResolveAssemblyReference.cache
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Debug\SignedDistanceFontGenerator.Form1.resources
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Debug\SignedDistanceFontGenerator.Properties.Resources.resources
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Debug\SignedDistanceFontGenerator.csproj.GenerateResource.Cache
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Debug\SignedDistanceFontGenerator.exe
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Debug\SignedDistanceFontGenerator.pdb
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\bin\Debug\SignedDistanceFontGenerator.exe.config
