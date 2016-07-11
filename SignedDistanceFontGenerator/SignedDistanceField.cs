@@ -74,7 +74,7 @@ namespace SignedDistanceFontGenerator
                 for (int x = 0; x < width; x++)
                 {
                     uint color = buffer[idx];
-                    bool set = (color & 0xff) > 0x7f;
+                    bool set = (color & 0xff) > 0x7f; //true if pixel color value is greater than 0.5
 
                     if (set)
                     {

@@ -30,7 +30,6 @@
         {
             this.fontList = new System.Windows.Forms.ComboBox();
             this.button1 = new System.Windows.Forms.Button();
-            this.fontPreview = new System.Windows.Forms.PictureBox();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.progressBar1 = new System.Windows.Forms.ToolStripProgressBar();
             this.toolStripStatusLabel1 = new System.Windows.Forms.ToolStripStatusLabel();
@@ -50,14 +49,16 @@
             this.label2 = new System.Windows.Forms.Label();
             this.label1 = new System.Windows.Forms.Label();
             this.label_Scale = new System.Windows.Forms.Label();
-            this.button3 = new System.Windows.Forms.Button();
+            this.OpenButton = new System.Windows.Forms.Button();
             this.SaveButton = new System.Windows.Forms.Button();
             this.GenerateButton = new System.Windows.Forms.Button();
-            this.decalPreview = new System.Windows.Forms.PictureBox();
             this.tabPage1 = new System.Windows.Forms.TabPage();
-            this.svgOpenFile = new System.Windows.Forms.OpenFileDialog();
+            this.OpenFileDialogue = new System.Windows.Forms.OpenFileDialog();
             this.svgSaveFile = new System.Windows.Forms.SaveFileDialog();
-            ((System.ComponentModel.ISupportInitialize)(this.fontPreview)).BeginInit();
+            this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
+            this.WaitBox = new System.Windows.Forms.PictureBox();
+            this.decalPreview = new System.Windows.Forms.PictureBox();
+            this.fontPreview = new System.Windows.Forms.PictureBox();
             this.statusStrip1.SuspendLayout();
             this.tabControl1.SuspendLayout();
             this.tabPage2.SuspendLayout();
@@ -66,8 +67,10 @@
             this.panel3.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.SpreadSelector)).BeginInit();
             this.panel2.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.decalPreview)).BeginInit();
             this.tabPage1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.WaitBox)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.decalPreview)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.fontPreview)).BeginInit();
             this.SuspendLayout();
             // 
             // fontList
@@ -87,15 +90,6 @@
             this.button1.Text = "Generate";
             this.button1.UseVisualStyleBackColor = true;
             this.button1.Click += new System.EventHandler(this.button1_Click);
-            // 
-            // fontPreview
-            // 
-            this.fontPreview.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.fontPreview.Location = new System.Drawing.Point(6, 34);
-            this.fontPreview.Name = "fontPreview";
-            this.fontPreview.Size = new System.Drawing.Size(512, 256);
-            this.fontPreview.TabIndex = 4;
-            this.fontPreview.TabStop = false;
             // 
             // statusStrip1
             // 
@@ -144,6 +138,7 @@
             // 
             // tabPage2
             // 
+            this.tabPage2.Controls.Add(this.WaitBox);
             this.tabPage2.Controls.Add(this.tableLayoutPanel1);
             this.tabPage2.Location = new System.Drawing.Point(4, 23);
             this.tabPage2.Name = "tabPage2";
@@ -172,7 +167,7 @@
             // 
             this.panel1.Controls.Add(this.panel3);
             this.panel1.Controls.Add(this.panel2);
-            this.panel1.Controls.Add(this.button3);
+            this.panel1.Controls.Add(this.OpenButton);
             this.panel1.Controls.Add(this.SaveButton);
             this.panel1.Controls.Add(this.GenerateButton);
             this.panel1.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -308,15 +303,15 @@
             this.label_Scale.TabIndex = 5;
             this.label_Scale.Text = "Output Size";
             // 
-            // button3
+            // OpenButton
             // 
-            this.button3.Location = new System.Drawing.Point(0, 24);
-            this.button3.Name = "button3";
-            this.button3.Size = new System.Drawing.Size(75, 25);
-            this.button3.TabIndex = 2;
-            this.button3.Text = "Open";
-            this.button3.UseVisualStyleBackColor = true;
-            this.button3.Click += new System.EventHandler(this.button3_Click);
+            this.OpenButton.Location = new System.Drawing.Point(0, 24);
+            this.OpenButton.Name = "OpenButton";
+            this.OpenButton.Size = new System.Drawing.Size(75, 25);
+            this.OpenButton.TabIndex = 2;
+            this.OpenButton.Text = "Open";
+            this.OpenButton.UseVisualStyleBackColor = true;
+            this.OpenButton.Click += new System.EventHandler(this.ButtonLoad_onClick);
             // 
             // SaveButton
             // 
@@ -327,7 +322,7 @@
             this.SaveButton.TabIndex = 0;
             this.SaveButton.Text = "Save";
             this.SaveButton.UseVisualStyleBackColor = true;
-            this.SaveButton.Click += new System.EventHandler(this.button2_Click);
+            this.SaveButton.Click += new System.EventHandler(this.SaveButton_Click);
             // 
             // GenerateButton
             // 
@@ -338,19 +333,7 @@
             this.GenerateButton.TabIndex = 0;
             this.GenerateButton.Text = "Generate";
             this.GenerateButton.UseVisualStyleBackColor = true;
-            this.GenerateButton.Click += new System.EventHandler(this.button2_Click);
-            // 
-            // decalPreview
-            // 
-            this.decalPreview.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Center;
-            this.decalPreview.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.decalPreview.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.decalPreview.Location = new System.Drawing.Point(3, 61);
-            this.decalPreview.Margin = new System.Windows.Forms.Padding(3, 3, 3, 25);
-            this.decalPreview.Name = "decalPreview";
-            this.decalPreview.Size = new System.Drawing.Size(572, 447);
-            this.decalPreview.TabIndex = 3;
-            this.decalPreview.TabStop = false;
+            this.GenerateButton.Click += new System.EventHandler(this.GenerateButton_onClick);
             // 
             // tabPage1
             // 
@@ -366,6 +349,38 @@
             this.tabPage1.Text = "Font";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
+            // WaitBox
+            // 
+            this.WaitBox.AccessibleRole = System.Windows.Forms.AccessibleRole.Animation;
+            this.WaitBox.Image = global::SignedDistanceFontGenerator.Properties.Resources.rolling;
+            this.WaitBox.InitialImage = global::SignedDistanceFontGenerator.Properties.Resources.rolling;
+            this.WaitBox.Location = new System.Drawing.Point(144, 72);
+            this.WaitBox.Name = "WaitBox";
+            this.WaitBox.Size = new System.Drawing.Size(128, 128);
+            this.WaitBox.TabIndex = 8;
+            this.WaitBox.TabStop = false;
+            // 
+            // decalPreview
+            // 
+            this.decalPreview.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Center;
+            this.decalPreview.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.decalPreview.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.decalPreview.Location = new System.Drawing.Point(3, 61);
+            this.decalPreview.Margin = new System.Windows.Forms.Padding(3, 3, 3, 25);
+            this.decalPreview.Name = "decalPreview";
+            this.decalPreview.Size = new System.Drawing.Size(572, 447);
+            this.decalPreview.TabIndex = 3;
+            this.decalPreview.TabStop = false;
+            // 
+            // fontPreview
+            // 
+            this.fontPreview.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.fontPreview.Location = new System.Drawing.Point(6, 34);
+            this.fontPreview.Name = "fontPreview";
+            this.fontPreview.Size = new System.Drawing.Size(512, 256);
+            this.fontPreview.TabIndex = 4;
+            this.fontPreview.TabStop = false;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -379,7 +394,6 @@
             this.Text = "Signed distance field generator tool";
             this.Load += new System.EventHandler(this.Form1_Load);
             this.ResizeEnd += new System.EventHandler(this.Form1_ResizeEnd);
-            ((System.ComponentModel.ISupportInitialize)(this.fontPreview)).EndInit();
             this.statusStrip1.ResumeLayout(false);
             this.statusStrip1.PerformLayout();
             this.tabControl1.ResumeLayout(false);
@@ -391,8 +405,10 @@
             ((System.ComponentModel.ISupportInitialize)(this.SpreadSelector)).EndInit();
             this.panel2.ResumeLayout(false);
             this.panel2.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.decalPreview)).EndInit();
             this.tabPage1.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.WaitBox)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.decalPreview)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.fontPreview)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -412,9 +428,9 @@
         private System.Windows.Forms.TabPage tabPage1;
         private System.Windows.Forms.TabPage tabPage2;
         private System.Windows.Forms.PictureBox decalPreview;
-        private System.Windows.Forms.Button button3;
+        private System.Windows.Forms.Button OpenButton;
         private System.Windows.Forms.Button GenerateButton;
-        private System.Windows.Forms.OpenFileDialog svgOpenFile;
+        private System.Windows.Forms.OpenFileDialog OpenFileDialogue;
         private System.Windows.Forms.SaveFileDialog svgSaveFile;
         private System.Windows.Forms.ComboBox SizeSelectBox_X;
         private System.Windows.Forms.Label label_Scale;
@@ -429,6 +445,8 @@
         private System.Windows.Forms.Panel panel3;
         private System.Windows.Forms.Panel panel2;
         private System.Windows.Forms.Panel panel4;
+        private System.Windows.Forms.PictureBox WaitBox;
+        private System.ComponentModel.BackgroundWorker backgroundWorker1;
     }
 }
 

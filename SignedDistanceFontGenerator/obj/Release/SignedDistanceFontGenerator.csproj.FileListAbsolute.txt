@@ -1,0 +1,9 @@
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\bin\Release\SignedDistanceFontGenerator.exe.config
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\bin\Release\SignedDistanceFontGenerator.exe
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\bin\Release\SignedDistanceFontGenerator.pdb
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\bin\Release\Svg.dll
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Release\SignedDistanceFontGenerator.Form1.resources
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Release\SignedDistanceFontGenerator.Properties.Resources.resources
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Release\SignedDistanceFontGenerator.csproj.GenerateResource.Cache
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Release\SignedDistanceFontGenerator.exe
+D:\Projects\Code\signed-distance-field-font-generator\SignedDistanceFontGenerator\obj\Release\SignedDistanceFontGenerator.pdb

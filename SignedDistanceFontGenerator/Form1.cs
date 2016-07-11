@@ -20,6 +20,7 @@ using Svg;
 
 namespace SignedDistanceFontGenerator
 {
+
     public partial class Form1 : Form
     {
         Dictionary<char, Bitmap> dict = new Dictionary<char, Bitmap>();
@@ -31,6 +32,12 @@ namespace SignedDistanceFontGenerator
             InitializeComponent();
             ThreadPool.SetMaxThreads(Environment.ProcessorCount, 1);
             this.SizeSelectBox_X.SelectedIndex = 5;
+            this.SizeSelectBox_Y.SelectedIndex = 5;
+            if (!DecalLoaded)
+            {
+                this.GenerateButton.Enabled = false;
+            }
+            initializeWaitGraphic();
         }
 
         Win32.TEXTMETRIC GetTextMetrics(Font f)
@@ -184,25 +191,79 @@ namespace SignedDistanceFontGenerator
         #endregion
         #region Decal Functions
 
-        private string lastSvgFilename = "";
+        //CONSIDER: break this to a class?
+        private string lastSourceFilename = "";
         bool DecalLoaded = false;
         Tuple<float, float> lastWidthHeight = new Tuple<float, float>(0, 0);
-        private void button3_Click(object sender, EventArgs e)//load button
+        private Bitmap SourceBitmap;
+        private float SourceAspect;
+        private Bitmap lastGenerated;
+        private bool Rendered = false;
+
+        private void initializeWaitGraphic()
         {
-            //Todo: Add ability to load image file formats also
-            svgOpenFile.Filter = "SVG Files (*.svg)|*.svg|All files (*.*)|*.*";
-            if (svgOpenFile.ShowDialog() != DialogResult.OK) return;
-
-            lastSvgFilename = svgOpenFile.FileName;
-            //to minimize disk IO this is only opened once here and when it needs to be rerendered. 
-            SvgDocument d = SvgDocument.Open(svgOpenFile.FileName);
-            lastWidthHeight = new Tuple<float, float>(d.Width.Value, d.Height.Value);
-            DecalLoaded = true;
-
-            decalPreview.Image = RenderSVGToFit(svgOpenFile.FileName, decalPreview.Width, decalPreview.Height);
-           
+            int boxDim = 32;
+            WaitBox.SizeMode = PictureBoxSizeMode.StretchImage;
+            WaitBox.Size = new Size(boxDim, boxDim);
+            centerWaitGraphic();
+            WaitBox.Enabled = false;
+            WaitBox.Visible = false;
+        }
+        private void centerWaitGraphic()
+        {
+            WaitBox.Location = new System.Drawing.Point((int)(decalPreview.Width / 2 - WaitBox.Width / 2), (int)(decalPreview.Top + (decalPreview.Height / 2 - WaitBox.Height / 2)));
         }
 
+        //todo: Make graphic ACTUALLY transparent. Will require a custom class.
+        //REF: http://www.codeproject.com/Articles/25048/How-to-Use-Transparent-Images-and-Labels-in-Window
+
+        delegate void waitGraphicEnableDelegate(bool enable);
+
+        private void waitGraphicEnable(bool enable)
+        {
+            if (this.WaitBox.InvokeRequired)
+            {
+                waitGraphicEnableDelegate d = new waitGraphicEnableDelegate(waitGraphicEnable);
+                this.Invoke(d, new object[] { enable });
+            }
+            else
+            {
+                this.WaitBox.Enabled = enable;
+                this.WaitBox.Visible = enable;
+            }
+        }
+
+        private void ButtonLoad_onClick(object sender, EventArgs e)//load button
+        {
+            //Todo: Add ability to load image file formats also
+            //OpenFileDialogue.Filter = "SVG Files (*.svg)|*.svg|Image files (*.png, *.tiff, *.tif)|*.png;.tiff;.tif|All files (*.*)|*.*";
+            //This may be a significant undertaking
+            //Most of these routines are built with an SVG being assumed.
+
+            OpenFileDialogue.Filter = "SVG Files (*.svg)|*.svg|All files (*.*)|*.*";
+            if (OpenFileDialogue.ShowDialog() != DialogResult.OK) return;
+
+                lastSourceFilename = OpenFileDialogue.FileName;
+            
+            
+            //to minimize disk IO this is only opened once here and when it needs to be rerendered for actual field generation. 
+            SvgDocument d = SvgDocument.Open(OpenFileDialogue.FileName);
+            lastWidthHeight = new Tuple<float, float>(d.Width.Value, d.Height.Value);
+            DecalLoaded = true;
+            this.GenerateButton.Enabled = true;
+            SourceAspect = lastWidthHeight.Item1 / lastWidthHeight.Item2;
+            int sourceHeight = 4096;
+            int sourceWidth = (int)(4096*(1.0f/SourceAspect));
+            
+            //rendered once to memory. That file in memory is downsampled for the preview image as the window is resized.
+            SourceBitmap = SignedDistanceFieldRenderer.RenderSvgToBitmapWithMaximumSize(lastSourceFilename, sourceWidth, sourceHeight);
+            decalPreview.Image = BitmapHelper.ResizeBitmapToFit(SourceBitmap, decalPreview.Width, decalPreview.Height, SourceAspect);
+     
+        }
+
+     
+
+        //TODO: put this in the renderer class where it fits better. Will need to convert lastWidthHeight to a variable passed in.
         private Bitmap RenderSVGToFit(string FileName, int width, int height) 
         {
             
@@ -222,6 +283,8 @@ namespace SignedDistanceFontGenerator
             return SignedDistanceFieldRenderer.RenderSvgToBitmapWithMaximumSize(FileName, renderwidth, renderheight);
          }
 
+
+
         private Tuple<int,int> GetRenderToFitSizes(int width, int height)
         {
             //there's probably a more elegant way to do this, but it works.
@@ -240,16 +303,44 @@ namespace SignedDistanceFontGenerator
             return new Tuple<int, int>(renderwidth, renderheight);
         }
 
-        private void button2_Click(object sender, EventArgs e)//generate button
+        private void GenerateButton_onClick(object sender, EventArgs e)//generate button
         {
-            if (!string.IsNullOrEmpty(lastSvgFilename))
+            progressBar1.Maximum = 100;
+            progressBar1.Step = 1;
+            progressBar1.Value = progressBar1.Minimum;
+
+            if (!string.IsNullOrEmpty(lastSourceFilename))
             {
-                svgSaveFile.Filter = "PNG Files (*.png)|*.png|All files (*.*)|*.*";
-                if (svgSaveFile.ShowDialog() != DialogResult.OK) return;
+
+
+                //reWork this so that the source image is rendered as some multiple of the target image size.
+
+                //change scale factor to a tuple to indicate x and y sizing.
+                Thread gThread, iThread;
                 int scalefactor = this.SizeSelectBox_X.SelectedIndex;
+                int scaleFactorH = this.SizeSelectBox_Y.SelectedIndex;
                 int spreadFactor = (int)this.SpreadSelector.Value;
-                SignedDistanceFieldRenderer.RenderSvgToDistanceFieldToFile(lastSvgFilename, svgSaveFile.FileName, scalefactor, spreadFactor);
-                
+                float aspect = lastWidthHeight.Item1 / lastWidthHeight.Item2;
+                //separate render thread. This is the real time sink for this routime.
+                gThread = new Thread(() =>
+                {
+                    Debug.Print("Generating distance field from " + lastSourceFilename.ToString());
+                    lastGenerated = SignedDistanceFieldRenderer.RenderSvgToDistanceFieldToBMP(lastSourceFilename, scalefactor, spreadFactor, (int)(4096 * aspect), 4096);
+                    decalPreview.Image = lastGenerated;
+                    Debug.Print("Distance field generated.");
+                    Rendered = true;
+                });
+                gThread.Start();
+
+                //thread that shows the spinning "working" graphic. while rendering in progress. Hides it when render completes.
+                iThread = new Thread(() =>
+                {
+                    waitGraphicEnable(true);
+                    gThread.Join();
+                    waitGraphicEnable(false);
+                    
+                });
+                iThread.Start();
             }
         }
 
@@ -258,11 +349,29 @@ namespace SignedDistanceFontGenerator
 
         private void Form1_ResizeEnd(object sender, EventArgs e)
         {
-            if (DecalLoaded)
+            if (!Rendered)
             {
-                decalPreview.Image = RenderSVGToFit(lastSvgFilename, decalPreview.Width, decalPreview.Height);
+                if (DecalLoaded)
+                {
+                    //decalPreview.Image = RenderSVGToFit(lastSourceFilename, decalPreview.Width, decalPreview.Height);
+                    decalPreview.Image = BitmapHelper.ResizeBitmapToFit(SourceBitmap, decalPreview.Width, decalPreview.Height, (lastWidthHeight.Item1 / lastWidthHeight.Item2));                }
             }
+            else
+            {
+                decalPreview.Image = lastGenerated;
+            }
+            centerWaitGraphic();
         }
+
+        private void SaveButton_Click(object sender, EventArgs e)
+        {
+            //save distance field image.
+            svgSaveFile.Filter = "PNG Files (*.png)|*.png|All files (*.*)|*.*";
+            if (svgSaveFile.ShowDialog() != DialogResult.OK) return;
+            lastGenerated.Save(svgSaveFile.FileName, ImageFormat.Png);
+        }
+
+  
     }
 
     

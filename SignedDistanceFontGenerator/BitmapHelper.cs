@@ -31,5 +31,24 @@ namespace SignedDistanceFontGenerator
 
             return result; ;
         }
+        
+        public static Bitmap ResizeBitmapToFit(Bitmap sourceBitmap, int width, int height, float aspectRatio)
+        {
+            
+            int renderheight, renderwidth;
+            if ((aspectRatio <= 1.0f))
+            {
+                renderheight = height;
+                renderwidth = (int)(height * aspectRatio);
+
+            }
+            else {
+                renderheight = (int)(width * (1.0f / aspectRatio));
+                renderwidth = width;
+            }
+            return BitmapHelper.ResizeBitmap(sourceBitmap, renderwidth, renderheight, InterpolationMode.Bilinear);
+
+        }
+
     }
 }

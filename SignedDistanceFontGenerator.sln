@@ -5,6 +5,12 @@ VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SignedDistanceFontGenerator", "SignedDistanceFontGenerator\SignedDistanceFontGenerator.csproj", "{6B308F00-FF25-41A0-B930-11480698FC8F}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{0F45A595-08DB-4C43-85CC-799030C610C9}"
+	ProjectSection(SolutionItems) = preProject
+		SignedDistanceFontGenerator\ripple.gif = SignedDistanceFontGenerator\ripple.gif
+		SignedDistanceFontGenerator\rolling.gif = SignedDistanceFontGenerator\rolling.gif
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

@@ -37,6 +37,8 @@ namespace SignedDistanceFontGenerator
             return bmp;
         }
 
+        
+
         public static char AsciiToChar(byte c)
         {
             byte[] input = { c };
@@ -113,6 +115,42 @@ namespace SignedDistanceFontGenerator
             }));
         }
 
+        public static Bitmap CreateBigDistanceField(InterpolationMode interpolation, int width, int height, int scale, uint[] buffer, int spreadFactor = -1)
+        {
+
+           
+            Bitmap output = new Bitmap(width>>scale,height>>scale);
+            Grid g1, g2;
+            Grid.FromBitmap(out g1, out g2, width, height, buffer);
+            Debug.Print(
+                   "Generating distance field: W:" + width.ToString() +
+                   " H:" + height.ToString() +
+                   " Spread: " + spreadFactor.ToString() +
+                   " Scale Factor: " + scale.ToString()
+                   ); 
+            Thread g1t, g2t, bitmapT;
+            g1t = new Thread(() =>
+                {
+                    g1.Generate();
+                    Debug.Print("Grid 1 generated.");
+                });
+            g2t = new Thread(() =>
+                {
+                    g2.Generate();
+                    Debug.Print("Grid 2 generated.");
+                });
+
+            g1t.Start();
+            g2t.Start();
+            g1t.Join();
+            g2t.Join();
+            output = Grid.ToBitmap(g1, g2, scale, interpolation, spreadFactor);
+                     
+            return output;
+
+           
+        }
+
         public static void RenderSvgToDistanceFieldToFile(string input, string output, int scaleFactor = 5, int spreadfactor = -1)
         {
             uint[] buffer;
@@ -131,6 +169,28 @@ namespace SignedDistanceFontGenerator
             ConvertToMonochrome(buffer, width, height);
             CreateAndStoreBigDistanceField(InterpolationMode.HighQualityBicubic, width, height, scaleFactor, output, buffer, spreadfactor);
         }
+
+        public static Bitmap RenderSvgToDistanceFieldToBMP(string input, int scaleFactor = 5, int spreadfactor = -1, int sourceWidth = 4096, int sourceHeight = 4096)
+        {
+            uint[] buffer;
+            
+            //TODO: make these a config setting
+            int width = sourceWidth;
+            int height = sourceHeight;
+
+            Bitmap svg = RenderSvgToBitmapWithMaximumSize(input, width, height);
+            Bitmap bmp = BitmapHelper.CreateNewManagedBitmap(width, height, out buffer);
+
+            using (Graphics g = Graphics.FromImage(bmp))
+            {
+                g.DrawImage(svg, 0, 0);
+            }
+
+            ConvertToMonochrome(buffer, width, height);
+            return CreateBigDistanceField(InterpolationMode.HighQualityBicubic, width, height, scaleFactor, buffer, spreadfactor);
+            //return CreateDistanceField(InterpolationMode.HighQualityBicubic, width, height, scaleFactor, buffer);
+        }
+
 
         public static void ConvertToMonochrome(uint[] buffer, int width, int height)
         {
